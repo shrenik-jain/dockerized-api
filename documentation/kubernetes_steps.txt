@@ -1,0 +1,125 @@
+-----------------------------------------------------
+ STEPS TO DEPLOY A DOCKER CONTAINER WITH KUBERNETES
+-----------------------------------------------------
+
+
+=> Created a kubernetes single node cluster (master node) using kubeadm
+
+    -> Install Docker from official Repo
+
+        -  Remove all other versions of docker from your system
+           `sudo apt-get remove -y docker docker-engine\docker.io containerd runc`
+
+        -  Add docker GPG key
+           `curl -fsSL https://download.docker.com/linux/ubuntu/gpg \| sudo gpg --dearmor \-o /usr/share/keyrings/docker-archive-keyring.gpg`
+
+        -  Add docker apt repository
+           `echo \"deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" \| sudo tee /etc/apt/sources.list.d/docker.list`
+
+        -  Fetch the package lists from docker repository
+           `sudo apt-get update`
+
+        -  Install docker and containerd
+           `sudo apt-get install -y docker-ce docker-ce-cli containerd.io`
+
+    -> Configure docker for kubeadm
+        
+        -  Configure docker to use overlay2 storage and systemd
+           `sudo mkdir -p /etc/docker
+            cat <<EOF | sudo tee /etc/docker/daemon.json
+            {
+                "exec-opts": ["native.cgroupdriver=systemd"],
+                "log-driver": "json-file",
+                "log-opts": {"max-size": "100m"},
+                "storage-driver": "overlay2"
+            }
+            EOF`
+
+        -  Restart docker to load new configuration
+           `sudo systemctl restart docker`
+
+        -  Add docker to start up programs
+           `sudo systemctl enable docker`
+
+        -  Allow current user access to docker command line
+           `sudo usermod -aG docker $USER`
+
+    -> Install kubeadm, kubelet and kubectl
+
+        -  Add Kubernetes GPG key
+           `sudo curl -fsSLo /usr/share/keyrings/kubernetes-archive-keyring.gpg \https://packages.cloud.google.com/apt/doc/apt-key.gpg`
+
+        -  Add Kubernetes apt repository
+           `echo "deb [signed-by=/usr/share/keyrings/kubernetes-archive-keyring.gpg] https://apt.kubernetes.io/ kubernetes-xenial main" \| sudo tee /etc/apt/sources.list.d/kubernetes.list`
+
+        -  Fetch package list
+           `sudo apt-get update`
+           `sudo apt-get install -y kubelet kubeadm kubectl`
+
+        -  Prevent them from being updated automatically
+           `sudo apt-mark hold kubelet kubeadm kubectl`
+
+    -> Ensure swap is disabled
+
+        -  See if swap is enabled
+           `swapon --show`
+
+        -  Turn off swap
+           `sudo swapoff -a`
+
+        -  Disable swap completely
+           `sudo sed -i -e '/swap/d' /etc/fstab`
+
+
+    -> Create the cluster using kubeadm
+       `sudo kubeadm init --pod-network-cidr=10.244.0.0/16`
+
+    -> Configure kubectl to be able to access the cluster
+       `mkdir -p $HOME/.kube`
+       `sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config`
+       `sudo chown $(id -u):$(id -g) $HOME/.kube/config`
+
+    -> We have to untaint the node to allow pods to be deployed to our single-node cluster otherwise your pods will be stuck in pending state
+       `kubectl taint nodes --all node-role.kubernetes.io/master-`
+
+    -> For networking to function you have to install a Container Network Interface (CNI) plugin. We’re installing flannel.
+       `kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml`
+
+    -> Turn on iptables bridge calls on master node
+       `echo "net.bridge.bridge-nf-call-iptables=1" | sudo tee -a /etc/sysctl.conf sudo sysctl -p`
+
+
+=> Chreck if master node is properly created using command
+   `kubectl get nodes`
+
+
+=> Created `docker_database_api.yaml` file mentioning all the necessary configurations for deployment of the flask app
+    
+    - Deploy the flask app using using command `kubectl create -f `docker_database_api.yaml` 
+    - Check if deployment is done without any issues using command `kubectl get deploy`
+
+
+=> We can scale the deployment using kubectl scale using --replicas option.
+    
+    - `kubectl scale deployment <name mentioned in metadata> dockerdatabaseapi`
+
+
+=> Created `docker_database_api_svc.yaml` file mentioning all the necessary configurations for deploying the load balancer
+    
+    - Deploy the flask app using using command `kubectl create -f `docker_database_api.yaml` 
+    - Check if deployment is done without any issues using command `kubectl get deploy`
+
+
+=> For the contents of the volume to persist, even if the MongoDB pod is deleted or moved to a different node, we create mongo-pv.yaml and deploy it using `kubectl create -f mongo-pv.yaml`
+
+
+=> To claim/obtain the storage created above and to be mounted on the mongo container, we create mongo-pvc.yaml and deploy it using command `kubectl create -f mongo-pvc.yaml`
+
+
+=> Created mongo.yaml file mentioning all the necessary configurations for deploying the mongoDB and creating an instance of the same and deploy it using command `kubectl create -f mongo.yaml`
+
+
+=> To make the mongo pod accessible from within the cluster, we create mongo-svc.yaml file and deploy it using command `kubectl -create -f mongo-svc.yaml`
+
+
+=> Once everything is up and running, check if API is running properly using `curl <cluster-IP for Flask App>:8080/hello` or by using Postman to hit the API externally

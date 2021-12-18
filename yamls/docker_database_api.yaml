@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dockerdatabaseapi
+  labels:
+    app: dockerdatabaseapi
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dockerdatabaseapi
+  template:
+    metadata:
+      labels:
+        app: dockerdatabaseapi
+    spec:
+      containers:
+        - name: dockerdatabaseapi
+          image: dockerdatabaseapi_app
+          ports:
+            - containerPort: 5000
+          imagePullPolicy: IfNotPresent

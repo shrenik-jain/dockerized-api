@@ -1,0 +1,52 @@
+------------------------------------------
+ STEPS TO DOCKERIZE A FLASK APPLICATION
+------------------------------------------
+
+
+- Created a Dockerfile to build a Docker image according to my specifications.
+```
+FROM python:3.6							          #Use a Base Image
+ADD . /app 							   	          #Add files into Docker Image
+WORKDIR /app 							            #get into the Working Directory where all the files are added
+RUN pip install -r requirements.txt 	#Install all requirements using RUN command
+
+```
+
+
+- Next, created a docker-compose.yml file with all the configurations to build/pull images for the Flask Application and MongoDB services and link both of these.
+```
+app:
+  build: .
+  command: python3 -u app.py
+  ports:
+    - "5000:5000"
+  volumes:
+    - .:/app
+  links:
+    - db
+
+db:
+  image: mongo
+  hostname: mongo
+  environment:
+    - MONGO_INITDB_DATABASE = test
+  ports:
+    - 27017:27017
+
+```
+
+
+- Created Docker Containers using the `docker-compose up` command.
+
+
+- Once the containers were active, used the `docker cp <csv> <mongodb container-name>:/tmp/<csv>` to copy the CSV file from current host directory to "tmp" directory inside the container.
+
+
+- Next, used the command `docker container exec -it <mongodb container-name> bash` to open the bash terminal for mongo
+
+
+- Lastly, imported the collection from "tmp" folder to container database by using the command 
+`mongoimport --uri "<mongodb connection uri>" -c <collection-name> -d <database-name> --type csv --headerline --file /tmp/<csv>`
+
+
+- Used POSTMAN to hit the API and got the desired output.
